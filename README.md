@@ -58,6 +58,11 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+Encountered architecture-specific issues with faiss-cpu on Mac M1 (arm64). Resolved by forcing a binary install of version 1.9.0
+```bash
+pip install --only-binary :all: faiss-cpu==1.9.0
+```
+
 4. Run the tests (they will fail until you complete the TODOs):
 
 ```bash
