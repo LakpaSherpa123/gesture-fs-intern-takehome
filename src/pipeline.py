@@ -11,8 +11,9 @@ Useful docs:
   - Vector store search: https://python.langchain.com/docs/how_to/vectorstores/
   - HuggingFace pipelines: https://python.langchain.com/docs/integrations/llms/huggingface_pipelines/
 """
-
 import os
+import argparse
+from typing import Dict, List, Any  # For Type Hinting
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from src.knowledge_base import build_knowledge_base
 
@@ -40,7 +41,6 @@ def get_llm():
 
     return generate
 
-
 # ──────────────────────────────────────────────
 # Provided: prompt template
 # ──────────────────────────────────────────────
@@ -54,57 +54,71 @@ Client question: {question}
 
 Answer:"""
 
+def print_response(result: dict) -> None:
+    print(f"\nAnswer: {result['answer']}")
+    print("\nSources used:")
+    for i, source in enumerate(result["sources"], 1):
+        # Clean up newlines and truncate for a readable terminal output
+        snippet = source.replace('\n', ' ')[:140]
+        print(f"{i}. {snippet}...")
+
+def single_question_CLI(vector_store: Any, llm: Any) -> bool:
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(description="Gesture AI Support Bot")
+    parser.add_argument("-query", type=str, help="Single query and exit")
+    args: argparse.Namespace = parser.parse_args()
+    
+    if args.query:
+        result: Dict[str, Any] = ask_question(vector_store, llm, args.query)
+        print_response(result)
+        return True
+        
+    return False
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # TODO 1: Implement ask_question
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def ask_question(vector_store, llm, question: str) -> dict:
-    """Retrieve relevant chunks and generate an answer.
-
-    Steps:
-      1. Use vector_store.similarity_search(question, k=3) to get
-         the top 3 most relevant document chunks.
-      2. Combine the chunk text into a single context string.
-         (Hint: each chunk has a .page_content attribute)
-      3. Format the PROMPT_TEMPLATE with the context and question.
-      4. Pass the formatted prompt to llm(...) and extract the
-         generated text from the result.
-
-    Args:
-        vector_store: FAISS vector store from knowledge_base.py
-        llm: Callable from get_llm()
-        question: The user's question string
-
-    Returns:
-        dict with two keys:
-            "answer"  -> str: the generated answer
-            "sources" -> list[str]: the chunk texts that were retrieved
-    """
-    # TODO: implement this (~6-8 lines)
-    raise NotImplementedError("TODO 1: Implement ask_question")
-
+def ask_question(vector_store, llm, question: str) -> dict[str, Any]:
+    docs: List[Any] = vector_store.similarity_search(question, k=3)
+    context:str = "\n\n".join([doc.page_content for doc in docs])
+    final_prompt: str = PROMPT_TEMPLATE.format(context=context, question=question)
+    result: List[Dict[str, str]] = llm(final_prompt)
+    answer: str = result[0]["generated_text"]
+    return {
+        "sources": [doc.page_content for doc in docs],
+        "answer": answer,
+    }
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # TODO 2: Complete the interactive loop
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def main():
-    """Interactive Q&A loop.
+def main() -> None:
+    data_dir: str = os.path.join(os.path.dirname(__file__), "..", "data")
 
-    Steps:
-      1. Build the knowledge base using build_knowledge_base()
-         with the data/ directory path.
-      2. Load the LLM using get_llm().
-      3. Start a loop that:
-         - Prompts the user for a question with input()
-         - Exits if they type "quit"
-         - Calls ask_question() with their input
-         - Prints the retrieved sources and the answer
-    """
-    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    try:
+        vector_store = build_knowledge_base(data_dir)
+        llm = get_llm()
+    except Exception as e:
+        print(f"Initialization failed: {e}")
+        return
 
-    # TODO: implement this (~10-12 lines)
-    raise NotImplementedError("TODO 2: Complete the interactive loop")
+    if(single_question_CLI(vector_store, llm)):
+        return
 
+    print("(Type 'quit' or 'exit' to end the session)")
+    while True:
+        query: str = input("\nYour Question: ").strip()
+        if not query:
+            continue
+        if query.lower() in ["quit", "exit"]:
+            print("Goodbye!")
+            break
+
+        try:
+            result = ask_question(vector_store, llm, query)
+            print_response(result)       
+        except Exception as e:
+            print(f"An error occurred while generating an answer: {e}")
+            
 
 if __name__ == "__main__":
     main()
